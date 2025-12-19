@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>冒險者旅程 - 完整本地模組版</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+
+    <style>
+        /* [區塊 A] 完整 8 色主題定義 */
+        :root { --p: #14b8a6; --bg: #020617; --c: #1e293b; --t: #f1f5f9; }
+        .theme-dark-teal { --p: #14b8a6; --bg: #020617; --c: #1e293b; --t: #f1f5f9; }
+        .theme-dark-pink { --p: #f472b6; --bg: #0f172a; --c: #1a1b2e; --t: #fce7f3; }
+        .theme-dark-gold { --p: #fbbf24; --bg: #1c1917; --c: #292524; --t: #fef3c7; }
+        .theme-dark-blue { --p: #3b82f6; --bg: #020617; --c: #1e293b; --t: #eff6ff; }
+        .theme-light-mint { --p: #059669; --bg: #f0fdf4; --c: #ffffff; --t: #064e3b; }
+        .theme-light-lavender { --p: #8b5cf6; --bg: #f5f3ff; --c: #ffffff; --t: #2e1065; }
+        .theme-light-sky { --p: #0ea5e9; --bg: #f0f9ff; --c: #ffffff; --t: #0c4a6e; }
+        .theme-light-clay { --p: #d97706; --bg: #fffbeb; --c: #ffffff; --t: #451a03; }
+
+        body { background-color: var(--bg); color: var(--t); transition: all 0.5s ease; font-family: sans-serif; }
+        .card { background-color: var(--c); border: 1px solid rgba(128,128,128,0.1); }
+        .bg-primary { background-color: var(--p); }
+        .shake { animation: shake 0.4s infinite; }
+        @keyframes shake { 0%,100%{transform:translate(0,0)} 25%{transform:translate(3px,-3px)} 75%{transform:translate(-3px,3px)} }
+        .damaged { filter: grayscale(0.8) contrast(1.2); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        /* =====================================================================
+           [區塊 B] 數據中心 - 完整配色
+           ===================================================================== */
+        const THEMES = [
+            { id: 'theme-dark-teal', color: '#14b8a6' }, { id: 'theme-dark-pink', color: '#f472b6' },
+            { id: 'theme-dark-gold', color: '#fbbf24' }, { id: 'theme-dark-blue', color: '#3b82f6' },
+            { id: 'theme-light-mint', color: '#059669' }, { id: 'theme-light-lavender', color: '#8b5cf6' },
+            { id: 'theme-light-sky', color: '#0ea5e9' }, { id: 'theme-light-clay', color: '#d97706' }
+        ];
+
+        /* =====================================================================
+           [區塊 C] 核心邏輯引擎 - 本地分類資料庫
+           ===================================================================== */
+        const LocalDatabase = {
+            categories: [
+                { type: '力量', icon: '⚔️', keywords: ['跑', '健身', '打球', '運動', '爬山', '訓練', '重訓', '走'] },
+                { type: '智慧', icon: '🔮', keywords: ['學', '讀', '寫', '課', '考', '研究', '編程', '工作', '報告'] },
+                { type: '靈魂', icon: '✨', keywords: ['冥想', '睡', '休息', '放鬆', '音樂', '靜坐', '禱告', '瑜珈'] },
+                { type: '社交', icon: '🤝', keywords: ['聚會', '聊', '電話', '見面', '約會', '陪伴', '家', '友'] },
+                { type: '生活', icon: '🏠', keywords: ['洗', '掃', '買', '煮', '吃', '整理', '垃圾', '花'] }
+            ],
+            autoClassify: (text) => {
+                for (let cat of LocalDatabase.categories) {
+                    if (cat.keywords.some(k => text.includes(k))) return { type: cat.type, icon: cat.icon };
+                }
+                return { type: '日常', icon: '📜' };
+            }
+        };
+
+        /* =====================================================================
+           [區塊 D] UI 組件 - 中文標籤
+           ===================================================================== */
+        const ProgressBar = ({ label, val, max, color = "bg-primary" }) => (
+            <div className="w-full space-y-1">
+                <div className="flex justify-between text-[11px] font-bold opacity-70">
+                    <span>{label}</span>
+                    <span>{val} / {max}</span>
+                </div>
+                <div className="h-2 bg-black/20 rounded-full overflow-hidden">
+                    <div className={`h-full ${color} transition-all duration-700`} style={{ width: `${(val/max)*100}%` }}></div>
+                </div>
+            </div>
+        );
+
+        /* =====================================================================
+           [區塊 E] 主程式控中心
+           ===================================================================== */
+        function App() {
+            const [player, setPlayer] = useState(() => JSON.parse(localStorage.getItem('v10_p')) || { name: '無名旅人', lv: 1, xp: 0, gender: 'M', theme: 'theme-dark-teal', isDamaged: false, energy: 100 });
+            const [tasks, setTasks] = useState(() => JSON.parse(localStorage.getItem('v10_t')) || []);
+            const [input, setInput] = useState({ text: '', hours: 24 });
+            const [isShaking, setIsShaking] = useState(false);
+            const [curTime, setCurTime] = useState(new Date());
+
+            useEffect(() => {
+                document.body.className = player.theme;
+                localStorage.setItem('v10_p', JSON.stringify(player));
+                localStorage.setItem('v10_t', JSON.stringify(tasks));
+                const timer = setInterval(() => setCurTime(new Date()), 1000);
+                return () => clearInterval(timer);
+            }, [player, tasks]);
+
+            const handleAddTask = () => {
+                if (!input.text) return;
+                const { type, icon } = LocalDatabase.autoClassify(input.text);
+                const deadline = new Date().getTime() + (input.hours * 3600000);
+                setTasks([{ id: Date.now(), content: input.text, type, icon, deadline, completed: false }, ...tasks]);
+                setInput({ ...input, text: '' });
+            };
+
+            const handleComplete = (id) => {
+                setTasks(tasks.map(t => t.id === id ? { ...t, completed: true } : t));
+                setPlayer(p => {
+                    let nx = p.xp + (p.isDamaged ? 100 : 300);
+                    let nl = p.lv;
+                    if (nx >= p.lv * 1000) { nx = 0; nl++; confetti(); }
+                    return { ...p, xp: nx, lv: nl, isDamaged: false, energy: Math.min(100, p.energy + 10) };
+                });
+            };
+
+            const handleAbandon = (id) => {
+                setTasks(tasks.filter(t => t.id !== id));
+                setIsShaking(true); setTimeout(() => setIsShaking(false), 3000);
+                setPlayer(p => ({ ...p, isDamaged: true, energy: Math.max(0, p.energy - 30) }));
+            };
+
+            return (
+                <div className={`p-4 min-h-screen ${isShaking ? 'shake' : ''} ${player.isDamaged ? 'damaged' : ''}`}>
+                    <header className="card max-w-5xl mx-auto p-6 rounded-3xl flex flex-wrap gap-6 items-center shadow-xl border-t-4 border-primary">
+                        <button onClick={() => setPlayer({...player, gender: player.gender==='M'?'F':'M'})} className="text-4xl bg-primary p-3 rounded-full hover:rotate-12 transition-transform">
+                            {player.gender==='M'?'👦':'👧'}
+                        </button>
+                        
+                        <div className="flex-1 space-y-3">
+                            <div>
+                                <input value={player.name} onChange={e => setPlayer({...player, name: e.target.value})} className="bg-transparent font-bold text-2xl border-b border-primary/20 outline-none w-48" />
+                                <p className="text-xs opacity-50 uppercase tracking-widest font-mono">冒險者等級.{player.lv} | {curTime.toLocaleTimeString()}</p>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <ProgressBar label="等級經驗值" val={player.xp} max={player.lv * 1000} />
+                                <ProgressBar label="生存能量" val={player.energy} max={100} color="bg-orange-500" />
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1 max-w-[140px] justify-center bg-black/10 p-2 rounded-2xl">
+                            {THEMES.map(t => (
+                                <button key={t.id} onClick={() => setPlayer({...player, theme: t.id})} className={`w-5 h-5 rounded-full border-2 ${player.theme === t.id ? 'border-white scale-125' : 'border-transparent opacity-60'}`} style={{ background: t.color }} />
+                            ))}
+                        </div>
+                    </header>
+
+                    <main className="max-w-5xl mx-auto mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <section className="card p-6 rounded-2xl h-fit">
+                            <h3 className="font-bold text-primary mb-4 flex items-center gap-2">✍️ 簽署冒險委託</h3>
+                            <input value={input.text} onChange={e => setInput({...input, text: e.target.value})} className="w-full bg-black/20 p-4 rounded-xl mb-4 outline-none border border-white/5 focus:border-primary/50" placeholder="你接下來要做什麼？" />
+                            <div className="grid grid-cols-4 gap-2 mb-6">
+                                {[1, 2, 4, 6, 12, 24, 72, 168].map(h => (
+                                    <button key={h} onClick={() => setInput({...input, hours: h})} className={`py-2 rounded border text-[10px] font-bold transition-all ${input.hours===h ? 'bg-primary border-primary text-white' : 'border-white/10 opacity-40 hover:opacity-100'}`}>{h}小時</button>
+                                ))}
+                            </div>
+                            <button onClick={handleAddTask} className="w-full bg-primary py-4 rounded-xl font-bold text-lg shadow-lg shadow-primary/20 active:scale-95 transition-all">確認並出發</button>
+                        </section>
+
+                        <section className="lg:col-span-2 space-y-4">
+                            {tasks.length === 0 && <div className="text-center py-20 opacity-20 font-bold text-xl">目前佈告欄空空如也...</div>}
+                            {tasks.map(t => (
+                                <div key={t.id} className={`card p-6 rounded-2xl flex justify-between items-center transition-all ${t.completed ? 'opacity-30 grayscale' : 'hover:translate-x-1 border-l-4 border-primary'}`}>
+                                    <div className="space-y-1">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-2xl">{t.icon}</span>
+                                            <h4 className="font-bold text-lg">{t.content}</h4>
+                                        </div>
+                                        <div className="flex gap-4 opacity-50 text-[10px] font-bold">
+                                            <span className="bg-white/10 px-2 py-0.5 rounded">分類: {t.type}</span>
+                                            <span className={Math.max(0, Math.floor((t.deadline - curTime)/3600000)) < 3 ? 'text-red-400' : ''}>
+                                                ⏳ 剩餘時間: {Math.max(0, Math.floor((t.deadline - curTime)/3600000))}小時
+                                            </span>
+                                        </div>
+                                    </div>
+                                    {!t.completed && (
+                                        <div className="flex gap-4">
+                                            <button onClick={() => handleAbandon(t.id)} className="text-xs font-bold opacity-30 hover:text-red-500 hover:opacity-100 transition-all">放棄</button>
+                                            <button onClick={() => handleComplete(t.id)} className="bg-primary/10 text-primary px-8 py-3 rounded-xl font-black hover:bg-primary hover:text-white transition-all">完成</button>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </section>
+                    </main>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
